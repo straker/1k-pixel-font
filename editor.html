@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pixel Font Editor</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #333;
+      font-size: 18px;
+    }
+
+    .container {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .canvas-container {
+      display: flex;
+      align-items: center;
+    }
+
+    .preview-container {
+      margin-left: 1rem;
+      background: #fdfdfd;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .bitmask-container {
+      margin-top: 1rem;
+      color: #fdfdfd;
+      font-family: Arial, sans-serif;
+      font-size: 1rem;
+    }
+
+    input {
+      width: 5rem;
+      font-family: inherit;
+      font-size: inherit;
+    }
+
+    ::-webkit-input-placeholder {
+      font-family: inherit;
+    }
+    ::-moz-placeholder {
+      font-family: inherit;
+    }
+    :-ms-input-placeholder {
+      font-family: inherit;
+    }
+
+    canvas {
+      display: inline-block;
+      background: #fdfdfd;
+      background-image: linear-gradient(45deg, #d9d9d9 25%, transparent 25%, transparent 75%, #d9d9d9 75%, #d9d9d9),
+                        linear-gradient(45deg, #d9d9d9 25%, transparent 25%, transparent 75%, #d9d9d9 75%, #d9d9d9);
+      background-size: 44px 44px;
+      background-position: 0 0, 22px 22px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="canvas-container">
+      <canvas id="canvas"></canvas>
+      <div class="preview-container">
+        <canvas id="canvasPreview"></canvas>
+      </div>
+    </div>
+    <div class="bitmask-container">
+      <label for="bitmask">Bitmask</label>
+      <input id="bitmask" maxlength="7" />
+    </div>
+  </div>
+  <script>
+  function copyState(state) {
+    return state.map(row => {
+      return row.map(col => col);
+    });
+  }
+
+  const canvas = document.getElementById('canvas');
+  const context = canvas.getContext('2d');
+  const gridSize = 22;
+  canvas.width = canvas.height = 7 * gridSize;
+
+  const canvasPreview = document.getElementById('canvasPreview');
+  const contextPreview = canvasPreview.getContext('2d');
+  const gridSizePreview = 2;
+  canvasPreview.width = canvasPreview.height = 7 * gridSizePreview;
+  const style = document.querySelector('.preview-container').style;
+  style.width = style.height = canvasPreview.width + (6 * gridSizePreview) + 'px';
+
+  const bitmask = document.getElementById('bitmask');
+
+  const pointer = {
+    row: -1,
+    col: -1
+  };
+  const initialState = [
+    [0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0]
+  ];
+  const history = [];
+  let pixels = copyState(initialState);
+  let isHolding = false;
+
+  function draw() {
+    requestAnimationFrame(draw);
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    contextPreview.clearRect(0, 0, canvasPreview.width, canvasPreview.height);
+
+    context.fillStyle = '#9f9f9f';
+    context.fillRect(pointer.col * gridSize, pointer.row * gridSize, gridSize, gridSize);
+
+    context.fillStyle = '#000';
+    pixels.forEach((rowPixels, row) => {
+      rowPixels.forEach((pixel, col) => {
+        if (pixel) {
+          context.fillRect(col * gridSize, row * gridSize, gridSize, gridSize);
+          contextPreview.fillRect(col * gridSizePreview, row * gridSizePreview, gridSizePreview, gridSizePreview);
+        }
+      });
+    });
+  }
+
+  function setBitmaskValue() {
+    let bitmaskValue = '';
+
+    // bitmask is in reverse col to row first
+    for (let col = 0; col < 7; col++) {
+
+      let bytes = '';
+      for (let row = 6; row >= 0; row--) {
+        bytes += pixels[row][col] ? '1' : '0';
+      }
+
+      const charCode = parseInt(bytes, 2) + 32;  // start at symbol a
+
+      // use Latin-1 Supplement characters to fill the gap in needed symbols
+      bitmaskValue += String.fromCharCode(charCode > 126 ? charCode + 65 : charCode);
+    }
+
+    bitmask.value = bitmaskValue;
+  }
+
+  function editPixel(row, col, deletePixel) {
+    if (row < 7 && col < 7) {
+      pixels[row][col] = deletePixel ? 0 : 1;
+      setBitmaskValue();
+    }
+  }
+
+  canvas.addEventListener('mousemove', (e) => {
+    const row = e.offsetY / gridSize | 0;
+    const col = e.offsetX / gridSize | 0;
+
+    if (pointer.row !== row || pointer.col !== col) {
+      pointer.row = row;
+      pointer.col = col;
+
+      if (isHolding) {
+        // ctrl or meta (cmd) key will remove the pixel
+        editPixel(row, col, e.metaKey || e.ctrlKey)
+      }
+    }
+  });
+  canvas.addEventListener('mousedown', (e) => {
+    isHolding = true;
+    history.push(copyState(pixels));
+
+    const row = e.offsetY / gridSize | 0;
+    const col = e.offsetX / gridSize | 0;
+
+    // ctrl or meta (cmd) key will remove the pixel
+    editPixel(row, col, e.metaKey || e.ctrlKey)
+  });
+  canvas.addEventListener('mouseup', (e) => {
+    isHolding = false;
+  });
+  canvas.addEventListener('mouseout', (e) => {
+    isHolding = false;
+  });
+  bitmask.addEventListener('keydown', (e) => {
+    // tab
+    if (e.which === 9) {
+      e.preventDefault();
+      let { value, selectionStart, selectionEnd } = bitmask;
+
+      bitmask.value = value.slice(0, selectionStart) + "\t" + value.slice(selectionEnd);
+      bitmask.setSelectionRange(selectionStart+1, selectionStart+1);
+    }
+    // enter
+    else if (e.which === 13) {
+      for(l=55;X=l&7,Y=l>>3,l>=0;l--) {
+        // console.log('\n\n');
+        // console.log({y: X, x: Y});
+        // console.log('(69 ^ bitmask.value.charCodeAt(Y)):',(69 ^ bitmask.value.charCodeAt(Y)));
+        // console.log('>> x:', (69 ^ bitmask.value.charCodeAt(Y)) >> X);
+        // console.log('& 1:', (69 ^ bitmask.value.charCodeAt(Y)) >> X & 1);
+        if (X < 7) {
+          const charCode = bitmask.value.charCodeAt(Y) - 32;
+          pixels[X][Y] = (charCode > 126 ? charCode - 65 : charCode) >> X & 1;
+        }
+      }
+    }
+  });
+  window.addEventListener('keydown', (e) => {
+    // undo (ctrl/cmd+z)
+    if (e.which === 90 && (e.ctrlKey || e.metaKey)) {
+      if (history.length) {
+        pixels = history.pop();
+      }
+      else {
+        pixels = copyState(initialState);
+      }
+
+      setBitmaskValue();
+    }
+  });
+
+  setBitmaskValue();
+  requestAnimationFrame(draw);
+  </script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "devDependencies": {
+    "gulp": "^4.0.2",
+    "gulp-size": "^3.0.0",
+    "gulp-terser": "^1.2.0"
+  }
+}
